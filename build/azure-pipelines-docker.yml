@@ -1,0 +1,40 @@
+jobs:
+- job: Build
+  displayName: 'Build inside Docker'
+  timeoutInMinutes: 45
+  pool:
+    name: Azure Pipelines
+    vmImage: 'ubuntu-18.04'
+  
+  strategy:
+    matrix:
+      ubuntu:
+        distro: 'ubuntu'
+      centos:
+        distro: 'centos'
+
+  steps:
+    - checkout: self
+      lfs: true
+      fetchDepth: 1
+
+    - task: Docker@2
+      displayName: 'Build Docker Container: $(distro)'
+      inputs:
+        command: build
+        Dockerfile: 'build/dockerfiles/$(distro)/Dockerfile'
+        arguments: -t ms-icu-container
+
+    - script: |
+        mkdir /tmp/build-output && docker run --rm -v $(pwd):/src -v /tmp/build-output:/dist ms-icu-container /src/build/build.sh
+      displayName: 'Build, test, and make install'
+
+    - script: |
+        cd /tmp/build-output && ls -Rl
+      displayName: 'Directory listing'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifacts'
+      inputs:
+        PathtoPublish: '/tmp/build-output/icu-binaries.tar.gz'
+        ArtifactName: '$(Build.BuildNumber)_$(distro)_icu-binaries.tar.gz'
